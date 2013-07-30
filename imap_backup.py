@@ -140,7 +140,7 @@ def chunker(seq, size):
     return ((seq[pos:pos + size], pos) for pos in xrange(0, len(seq), size))
 
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
-mail.login("jon@jbotelho.com", "iqlcysbgmtheornh")
+mail.login(IMAP_USERNAME, IMAP_PASSWORD)
 try:
     typ, data = mail.select("[Gmail]/All Mail")
     if typ != "OK":

@@ -7,9 +7,9 @@ if platform.system() == "Darwin":
         return (os.getgid(), os.getegid(), os.getgid())
     os.getresuid = getresuid
 import gnupg
-
 from boto.s3.connection import S3Connection
 
+from config import *
 
 
 class MessageArchiver(object):

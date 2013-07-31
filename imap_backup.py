@@ -90,11 +90,14 @@ def get_message(uid):
 
 class MessageBackup(object):
 
-    def __init__(self, headers, raw_message):
+    def __init__(self, headers, message=None):
         self.headers = headers
-        self.message = raw_message
+        if message is not None:
+            self.message = message
         self.date = email.utils.parsedate(self.headers["Date"])
-        self.path = self.__class__.message_path(self.headers["Message-ID"])
+        id_hash = hashlib.sha1(self.headers["Message-ID"]).hexdigest()
+        timestamp = "%s-%s" % (self.date[0], self.date[1])
+        self.path = "%s/%s/%s/%s.rfc822.gpg.gz" % (BACKUP_PATH, timestamp, id_hash[:3], id_hash)
 
     def save(self):
         #mkdir_p(os.path.dirname(self.path))
@@ -102,14 +105,13 @@ class MessageBackup(object):
         archived_message = archiver.archive_to_cloud(self.message, self.path)
 
     @classmethod
-    def message_path(cls, id):
-        id_hash = hashlib.sha1(id).hexdigest()
-        return "%s/%s/%s/%s.rfc822.gpg.gz" % (BACKUP_PATH, id_hash[:3], id_hash[3:6], id_hash)
+    def message_path(cls, message):
+        return cls(message).path
 
     @classmethod
-    def exists(cls, msg_id):
+    def exists(cls, message):
         #return os.path.exists(cls.message_path(msg_id))
-        return archiver.exists(cls.message_path(msg_id))
+        return archiver.exists(cls.message_path(message))
 
 
 
@@ -139,35 +141,62 @@ def bulk_fetch(uids, fields, chunk_size=100, raw_message=False):
 def chunker(seq, size):
     return ((seq[pos:pos + size], pos) for pos in xrange(0, len(seq), size))
 
-mail = imaplib.IMAP4_SSL("imap.gmail.com")
-mail.login(IMAP_USERNAME, IMAP_PASSWORD)
-try:
-    typ, data = mail.select("[Gmail]/All Mail")
-    if typ != "OK":
-        raise Exception("Could not find Gmail's 'All Mail' folder")
+
+if __name__ == "__main__":
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(IMAP_USERNAME, IMAP_PASSWORD)
     try:
-        # Get a list of all our messages (just their UIDs)
-        typ, data = mail.uid("search", ("ALL"))
-        uids = data[0].split(" ")
-        uids_to_backup = []
-        print "Found {:,} messages".format(len(uids))
-        # Download all their Message IDs (100 at a time), so we can compare to our existing backup
-        # Fetch just the Message-ID header
-        for uid, msg in bulk_fetch(uids[:100], "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])", chunk_size=1000):
-            if not MessageBackup.exists(msg["Message-ID"]):
-                # Yes (no existing backup found)
-                uids_to_backup.append(uid)
+        typ, data = mail.select("[Gmail]/All Mail")
+        if typ != "OK":
+            raise Exception("Could not find Gmail's 'All Mail' folder")
+        try:
+            # Get a list of all our messages (just their UIDs)
+            typ, data = mail.uid("search", ("ALL"))
+            uids = data[0].split(" ")
+            uids_to_backup = []
+            print "Found {:,} messages".format(len(uids))
+            # Download all their Message IDs (100 at a time), so we can compare to our existing backup
+            # Fetch just the Message-ID header
+            for uid, msg in bulk_fetch(uids[:100], "(BODY.PEEK[HEADER.FIELDS (DATE MESSAGE-ID)])", chunk_size=1000):
+                if not MessageBackup.exists(msg):
+                    # Yes (no existing backup found)
+                    uids_to_backup.append(uid)
 
-        # Run the backup
-        print "Need to backup {:,} messages".format(len(uids_to_backup))
-        # Download the entire messages as RFC822 in batches (standard E-Mail format)
-        archive_jobs = []
-        for uid, headers, raw_msg in bulk_fetch(uids_to_backup, "(RFC822)", raw_message=True    ):
-            backup = MessageBackup(headers, raw_msg)
-            print "Backing up %s to %s" % (msg["Message-ID"], backup.path)
-            backup.save()
+            # Run the backup
+            if len(uids_to_backup) > 0:
+                print "Need to backup {:,} messages".format(len(uids_to_backup))
+                # Download the entire messages as RFC822 in batches (standard E-Mail format)
+                archive_jobs = []
+                for uid, headers, raw_msg in bulk_fetch(uids_to_backup, "(RFC822)", raw_message=True    ):
+                    backup = MessageBackup(headers, raw_msg)
+                    print "Backing up %s to %s" % (msg["Message-ID"], backup.path)
+                    backup.save()
+            else:
+                print "Nothing to backup."
 
+            # Verify checksums
+            for provider, config in archiver.providers.iteritems():
+                corrupted_keys = []
+                # Check Amazon's recently-computed hash with the hash we computed at the time of the upload
+                print "Verifying data on %s..." % provider
+                total = 0
+                for key in config["bucket"].list(prefix=BACKUP_PATH + "/"):
+                    total += 1
+                    # Get the original hash (stored as custom metadata)
+                    key = config["bucket"].get_key(key.name)
+                    # If it doesn't match the provider's hash, mark it as corrupted
+                    # (note that we need to trim the etag, since it comes in as '"hash"' rather than 'hash')
+                    if key.etag[1:-1] != key.get_metadata("archive-hash"):
+                        corrupted_keys.append(key)
+                # Inform the user of any issues
+                if corrupted_keys:
+                    print "%s/%s messages are corrupted!" % (len(corrupted_keys), total)
+                    print "MD5 hash from S3 does not match original hash for the following:"
+                    print "\n".join([k.name for k in corrupted_keys])
+                else:
+                    print "Successfully verified all %s messages." % total
+
+        finally:
+            mail.close()
     finally:
-        mail.close()
-finally:
-    mail.logout()
+        mail.logout()

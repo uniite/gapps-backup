@@ -177,7 +177,7 @@ if __name__ == "__main__":
             # Verify checksums
             for provider, config in archiver.providers.iteritems():
                 corrupted_keys = []
-                # Check Amazon's recently-computed hash with the hash we computed at the time of the upload
+                # Check the provider's recently-computed hash with the original hash to detect data corruption
                 print "Verifying data on %s..." % provider
                 total = 0
                 for key in config["bucket"].list(prefix=BACKUP_PATH + "/"):
@@ -191,7 +191,7 @@ if __name__ == "__main__":
                 # Inform the user of any issues
                 if corrupted_keys:
                     print "%s/%s messages are corrupted!" % (len(corrupted_keys), total)
-                    print "MD5 hash from S3 does not match original hash for the following:"
+                    print "MD5 hash from provider does not match original hash for the following:"
                     print "\n".join([k.name for k in corrupted_keys])
                 else:
                     print "Successfully verified all %s messages." % total

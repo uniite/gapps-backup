@@ -1,0 +1,18 @@
+# The relative path to store the backups in (no trailing slash)
+BACKUP_PATH = "archive"
+# Used to backup encryption
+GPG_FINGERPRINT = "My GPG Key Fingerprint"
+GPG_KEY_ID = "My GPG Key ID"
+# Where to backup your messages
+STORAGE_PROVIDERS = {
+    "Amazon S3 (john_doe)": {
+        "provider": "S3",
+        "key": "My AWS Access Key ID",
+        "secret": "My AWS Access Key Secret",
+        "bucket": "com.example.my_backup_bucket",
+    }
+}
+# GMail/IMAP login info
+IMAP_USERNAME = "jdoe@exmaple.com"
+# If using GMail, you should use an application-specific password
+IMAP_PASSWORD = "my_gmail_password"

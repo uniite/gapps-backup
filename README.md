@@ -1,5 +1,3 @@
-GApps-Backup
-
 ## Overview
 Includes a script for backing up your GMail account over IMAP to S3 (or local fs, with some tweaks).
 It will automatically encrypt each message with GPG, compress it with GZip, and place it in a predictable place

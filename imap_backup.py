@@ -157,7 +157,7 @@ if __name__ == "__main__":
             print "Found {:,} messages".format(len(uids))
             # Download all their Message IDs (100 at a time), so we can compare to our existing backup
             # Fetch just the Message-ID header
-            for uid, msg in bulk_fetch(uids[:100], "(BODY.PEEK[HEADER.FIELDS (DATE MESSAGE-ID)])", chunk_size=1000):
+            for uid, msg in bulk_fetch(uids, "(BODY.PEEK[HEADER.FIELDS (DATE MESSAGE-ID)])", chunk_size=1000):
                 if not MessageBackup.exists(msg):
                     # Yes (no existing backup found)
                     uids_to_backup.append(uid)
